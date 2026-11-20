@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zero-Day Live Network Monitor</title>
+  <meta name="description" content="A live monitor that displays only packets captured from this computer's selected network interface." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="single-page-body">
+  <header class="navbar" id="navbar">
+    <div class="nav-brand">
+      <div class="nav-logo">
+        <svg width="26" height="26" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <circle cx="14" cy="14" r="12" stroke="url(#lg1)" stroke-width="2"/>
+          <path d="M8 14 L11 11 L14 17 L17 9 L20 14" stroke="url(#lg2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs><linearGradient id="lg1" x1="0" y1="0" x2="28" y2="28"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#7c3aed"/></linearGradient><linearGradient id="lg2" x1="0" y1="0" x2="28" y2="28"><stop offset="0%" stop-color="#00d4ff"/><stop offset="100%" stop-color="#a855f7"/></linearGradient></defs>
+        </svg>
+        <span class="brand-text">Zero<span class="brand-accent">Day</span></span>
+      </div>
+      <div class="nav-subtitle">Live Network Monitor</div>
+    </div>
+
+    <div class="nav-center">
+      <div class="status-pill" id="statusPill" title="WebSocket connection status"><span class="pulse-dot" id="pulseDot"></span><span id="statusText">Connecting…</span></div>
+      <button class="mode-badge" id="modeBadge" title="View capture diagnostics">DETECTING…</button>
+      <button class="mode-toggle-btn" id="restartCaptureBtn" title="Restart live packet capture">Restart Capture</button>
+    </div>
+
+    <div class="nav-right">
+      <div class="kpi-ribbon">
+        <div class="kpi-chip kpi-total" title="Verified captured packets"><span class="kpi-label">CAPTURED</span><span class="kpi-value" id="statTotal">0</span></div>
+        <div class="kpi-chip kpi-pps" title="Captured packets per second"><span class="kpi-label">PPS</span><span class="kpi-value" id="navPps">0</span></div>
+        <div class="kpi-chip kpi-bps" title="Captured bytes per second"><span class="kpi-label">BPS</span><span class="kpi-value" id="navBps">0 B/s</span></div>
+        <div class="kpi-chip kpi-valid" title="Records rejected by capture-integrity validation" id="validationChip"><span class="kpi-label">REJECTED</span><span class="kpi-value" id="navRejects">0</span></div>
+      </div>
+      <div class="nav-actions">
+        <button class="ai-toggle" id="aiToggle" aria-pressed="false" title="Train and enable CICIDS traffic analysis">AI OFF</button>
+        <button class="database-toggle" id="databaseToggle" aria-pressed="false" title="Enable local SQLite packet storage. CSV export always remains available.">DB OFF</button>
+        <button class="btn-icon" id="toggleCapture" title="Pause or resume the display">
+          <svg id="captureIcon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+        </button>
+        <button class="btn-icon" id="clearBtn" title="Clear the packet table"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+        <a href="/api/export/csv" class="export-btn" title="Export captured packets as CSV"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>CSV</a>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs-nav" id="tabsNav">
+    <button class="tab-btn active" id="tab-btn-live" data-tab="live">Live Packet Stream</button>
+    <button class="tab-btn" id="tab-btn-detail" data-tab="detail">Packet Details</button>
+    <div class="nav-uptime" id="statElapsed">Uptime: 0s</div>
+  </nav>
+
+  <div class="page-wrap">
+    <div class="tab-panel active" id="tab-live">
+      <div class="command-center-grid">
+        <aside class="col-telemetry">
+          <div class="panel telemetry-card" id="captureCard">
+            <div class="panel-header compact-header"><span class="panel-title"><span class="chart-live-dot"></span>Capture Status</span></div>
+            <div class="inspector-body" style="padding:2px 0">
+              <div class="inspector-row"><span class="inspector-key">Source</span><span class="inspector-value cyan">Network interface</span></div>
+              <div class="inspector-row"><span class="inspector-key">Records</span><span class="inspector-value">Only live captures</span></div>
+              <div class="inspector-row"><span class="inspector-key">Last packet</span><span class="inspector-value" id="lastPacketAge">Waiting</span></div>
+            </div>
+          </div>
+          <div class="panel telemetry-card ai-card" id="aiCard">
+            <div class="panel-header compact-header"><span class="panel-title">AI Threat Analysis</span><span class="ai-state" id="aiStatus">OFF</span></div>
+            <div class="ai-summary"><div><strong id="aiAnalyzed">0</strong><span>Analyzed</span></div><div><strong id="aiSafe">0</strong><span>Safe</span></div><div><strong id="aiThreat">0</strong><span>Threat</span></div></div>
+            <div class="ai-meter"><span id="aiSafeBar"></span></div><small id="aiPercent">Enable AI to analyze captured flows</small><small class="ai-footnote">Dataset labels: BENIGN and DDoS</small>
+          </div>
+          <div class="panel telemetry-card" id="trafficMiniCard">
+            <div class="panel-header compact-header"><span class="panel-title"><span class="chart-live-dot"></span>Live Traffic</span><div class="traffic-metrics-mini"><span class="traffic-pps-pill" id="trafficPps">0 pps</span><span class="traffic-bps-pill" id="trafficBps">0 B/s</span></div></div>
+            <div class="traffic-canvas-wrap-compact"><canvas id="trafficChart"></canvas></div>
+          </div>
+          <div class="panel telemetry-card col-bottom-card" id="breakdownCard">
+            <div class="panel-header compact-header"><span class="panel-title">Protocol Breakdown</span></div>
+            <div class="breakdown-body"><canvas id="protoChart" height="120"></canvas></div>
+          </div>
+        </aside>
+
+        <main class="col-packets">
+          <div class="panel packet-panel-fixed" id="packetPanel">
+            <div class="panel-header">
+              <div class="panel-title-group"><span class="chart-live-dot"></span><h2 class="panel-title">Live Packet Stream</h2><span class="engine-indicator-tag" id="engineTag">Waiting for capture</span></div>
+              <div class="panel-controls">
+                <label class="filter-label">Protocol:
+                  <select id="filterProto" class="filter-select"><option value="ALL">All Protocols</option><option value="TCP">TCP</option><option value="UDP">UDP</option><option value="ICMP">ICMP</option><option value="DNS">DNS</option><option value="ARP">ARP</option></select>
+                </label>
+                <label class="switch" title="Auto-scroll on incoming packets"><input type="checkbox" id="autoScroll" checked /><span class="slider"></span></label>
+              </div>
+            </div>
+            <div class="table-container-fixed" id="tableContainer">
+              <table class="packet-table" id="packetTable"><thead><tr><th>#</th><th>Time</th><th>Source</th><th>Destination</th><th>Protocol</th><th>Size</th><th>Flags</th><th>Threat</th><th>AI Label</th><th>Capture</th></tr></thead><tbody id="packetTbody"></tbody></table>
+            </div>
+          </div>
+        </main>
+
+        <aside class="col-intelligence">
+          <div class="panel intel-card intel-inspector" id="inspectorPanel">
+            <div class="panel-header compact-header"><div class="inspector-tabs"><button class="insp-tab active" id="inspTabInfo" onclick="switchInspTab('info')">Info</button><button class="insp-tab" id="inspTabHex" onclick="switchInspTab('hex')">Hex</button><button class="insp-tab" id="inspTabLayers" onclick="switchInspTab('layers')">Layers</button></div><button class="json-toggle-btn" id="openDetailTabBtn">Full Tab →</button></div>
+            <div class="inspector-content-wrap">
+              <div class="insp-panel active" id="inspPanelInfo"><div class="inspector-body" id="inspectorBody"><p class="inspector-hint">Click a verified live packet to inspect its captured headers and bytes.</p></div></div>
+              <div class="insp-panel" id="inspPanelHex"><div class="hex-dump-compact" id="inspectorHex"><p class="inspector-hint">Select a packet to view raw byte hex and ASCII.</p></div></div>
+              <div class="insp-panel" id="inspPanelLayers"><div class="layers-compact" id="inspectorLayers"><p class="inspector-hint">Select a packet to view its layer tree.</p></div></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="tab-detail">
+      <div id="detailContent" class="detail-container-scroll"><div class="detail-empty" style="padding:60px 20px"><h3>No Packet Selected</h3><p>Return to the live packet stream and select a captured packet to see its headers, raw bytes, and layer stack.</p><button class="json-toggle-btn" onclick="switchTab('live')" style="margin-top:14px">Go to Live Packet Stream</button></div></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="captureModal">
+    <div class="modal-card"><div class="modal-header"><div class="modal-title"><span class="modal-icon">⚙️</span><h3>Capture Health &amp; Diagnostics</h3></div><button class="modal-close-btn" onclick="closeCaptureModal()">✕</button></div>
+      <div class="modal-body" id="captureModalBody">
+        <div class="diag-item"><span class="diag-label">Active engine:</span><span class="diag-val cyan" id="diagEngine">Detecting…</span></div>
+        <div class="diag-item"><span class="diag-label">Capture mode:</span><span class="diag-val" id="diagMode">LIVE</span></div>
+        <div class="diag-item"><span class="diag-label">Administrator privileges:</span><span class="diag-val" id="diagAdmin">No</span></div>
+        <div class="diag-item"><span class="diag-label">Default network route IP:</span><span class="diag-val cyan" id="diagIp">—</span></div>
+        <div class="diag-item"><span class="diag-label">Npcap service:</span><span class="diag-val" id="diagNpcap">Checking…</span></div>
+        <div class="diag-item"><span class="diag-label">Npcap driver DLL:</span><span class="diag-val" id="diagDll">—</span></div>
+        <div class="modal-actions-bar"><button class="toggle-mode-btn-modal" onclick="restartCapture()">Restart Live Capture</button></div>
+        <div class="modal-hint"><strong>Windows:</strong> Install Npcap with WinPcap API-compatible mode, then run <code>run_admin.bat</code> as Administrator if your driver requires it.</div>
+        <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:14px;padding-top:14px">
+          <h4 style="color:var(--cyan);font-size:0.75rem;margin:0 0 10px">Packet Integrity Validation</h4>
+          <div class="diag-item"><span class="diag-label">Packets received:</span><span class="diag-val cyan" id="diagValReceived">0</span></div>
+          <div class="diag-item"><span class="diag-label">Packets accepted:</span><span class="diag-val" id="diagValAccepted" style="color:var(--green)">0</span></div>
+          <div class="diag-item"><span class="diag-label">Packets rejected:</span><span class="diag-val" id="diagValRejected" style="color:var(--red)">0</span></div>
+          <div class="diag-item"><span class="diag-label">Last reject reason:</span><span class="diag-val" id="diagValLastReject" style="color:var(--yellow);font-size:0.65rem">—</span></div>
+          <div style="display:flex;gap:8px;margin-top:10px"><button class="probe-btn-modal" onclick="purgeInvalidPackets()">Purge invalid records</button><button class="toggle-mode-btn-modal" onclick="resetValidationStats()">Reset counters</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast-container" id="toastContainer"></div>
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/socket.js"></script>
+</body>
+</html>
